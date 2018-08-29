@@ -14,10 +14,10 @@ namespace RayTracer
 {
     internal unsafe class RayTracingApplication
     {
-        public const uint Width = 1280;
-        public const uint Height = 720;
+        public const uint Width = 800;
+        public const uint Height = 640;
         public const uint ViewScale = 1;
-        public const uint NumSamples = 4;
+        public const uint NumSamples = 1;
 
         private Sdl2Window _window;
         private GraphicsDevice _gd;
@@ -41,7 +41,7 @@ namespace RayTracer
         private ResourceSet _computeSet;
         private Pipeline _computePipeline;
         private ulong _totalRays = 0;
-        private bool _drawModeCPU = false;
+        private bool _drawModeCPU = true;
 
         public void Run()
         {
@@ -57,8 +57,8 @@ namespace RayTracer
 
             _randState = (uint)new Random().Next();
 
-            CreateBookScene(ref _randState);
-            //CreateToyPathTracerScene();
+            //CreateBookScene(ref _randState);
+            CreateToyPathTracerScene();
 
             Debug.Assert(_spheres.Length == _materials.Length);
             _sceneParams.SphereCount = (uint)_spheres.Length;
@@ -351,51 +351,16 @@ namespace RayTracer
                 }
                 case MaterialType.Metal:
                 {
-                    Vector3 reflected = Vector3.Reflect(Vector3.Normalize(ray.Direction), hit.Normal);
-                    scattered = Ray.Create(
-                        hit.Position,
-                        reflected + material.FuzzOrRefIndex * RandUtil.RandomInUnitSphere(ref state));
+                    Vector3 target = hit.Position + hit.Normal + RandUtil.RandomInUnitSphere(ref state);
+                    scattered = Ray.Create(hit.Position, target - hit.Position);
                     attenuation = material.Albedo;
-                    return Vector3.Dot(scattered.Direction, hit.Normal) > 0;
+                    return true;
                 }
                 case MaterialType.Dielectric:
                 {
-                    Vector3 outwardNormal;
-                    Vector3 reflectDir = Vector3.Reflect(ray.Direction, hit.Normal);
-                    float niOverNt;
-                    attenuation = new Vector3(1, 1, 1);
-                    Vector3 refractDir;
-                    float reflectProb;
-                    float cosine;
-                    if (Vector3.Dot(ray.Direction, hit.Normal) > 0)
-                    {
-                        outwardNormal = -hit.Normal;
-                        niOverNt = material.FuzzOrRefIndex;
-                        cosine = material.FuzzOrRefIndex * Vector3.Dot(ray.Direction, hit.Normal) / ray.Direction.Length();
-                    }
-                    else
-                    {
-                        outwardNormal = hit.Normal;
-                        niOverNt = 1f / material.FuzzOrRefIndex;
-                        cosine = -Vector3.Dot(ray.Direction, hit.Normal) / ray.Direction.Length();
-                    }
-                    if (Refract(ray.Direction, outwardNormal, niOverNt, out refractDir))
-                    {
-                        reflectProb = Schlick(cosine, material.FuzzOrRefIndex);
-                    }
-                    else
-                    {
-                        reflectProb = 1f;
-                    }
-                    if (RandUtil.RandomFloat(ref state) < reflectProb)
-                    {
-                        scattered = Ray.Create(hit.Position, reflectDir);
-                    }
-                    else
-                    {
-                        scattered = Ray.Create(hit.Position, refractDir);
-                    }
-
+                   Vector3 target = hit.Position + hit.Normal + RandUtil.RandomInUnitSphere(ref state);
+                    scattered = Ray.Create(hit.Position, target - hit.Position);
+                    attenuation = material.Albedo;
                     return true;
                 }
 
@@ -404,30 +369,6 @@ namespace RayTracer
                     scattered = Ray.Create(new Vector3(), new Vector3());
                     return false;
             }
-        }
-
-        public static bool Refract(Vector3 v, Vector3 n, float niOverNt, out Vector3 refracted)
-        {
-            Vector3 uv = Vector3.Normalize(v);
-            float dt = Vector3.Dot(uv, n);
-            float discriminant = 1f - niOverNt * niOverNt * (1 - dt * dt);
-            if (discriminant > 0)
-            {
-                refracted = niOverNt * (uv - n * dt) - n * MathF.Sqrt(discriminant);
-                return true;
-            }
-            else
-            {
-                refracted = Vector3.Zero;
-                return false;
-            }
-        }
-
-        public static float Schlick(float cosine, float refIndex)
-        {
-            float r0 = (1 - refIndex) / (1 + refIndex);
-            r0 = r0 * r0;
-            return r0 + (1 - r0) * MathF.Pow(1 - cosine, 5);
         }
 
         // Create Veldrid resources
